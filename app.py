@@ -1,4 +1,4 @@
-"""AI ライティングツール（Streamlit + Cloudflare Workers AI）"""
+"""AI ライティングツール（Streamlit + Cloudflare Workers AI / Google Gemini）"""
 
 from __future__ import annotations
 
@@ -9,7 +9,8 @@ from datetime import datetime
 import streamlit as st
 from dotenv import load_dotenv
 
-from cloudflare_client import list_text_models, stream_generate
+import cloudflare_client
+import gemini_client
 from tools import TOOLS, TOOLS_BY_ID, Field, Tool
 
 load_dotenv()
@@ -29,13 +30,24 @@ ss.setdefault("pending", None)      # 生成待ちの tool_id
 
 ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
 API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 AUTH_USER = os.getenv("APP_AUTH_USER", "")
 AUTH_PASSWORD = os.getenv("APP_AUTH_PASSWORD", "")
 
 
+# 使える AI サービス（.env に認証情報があるものだけ）
+PROVIDERS = {}
+if GEMINI_API_KEY:
+    PROVIDERS["gemini"] = "Google Gemini"
+if ACCOUNT_ID and API_TOKEN:
+    PROVIDERS["cloudflare"] = "Cloudflare Workers AI"
+
+
 @st.cache_data(show_spinner=False, ttl=3600)
-def cached_models(account_id: str, api_token: str) -> list[str]:
-    return list_text_models(account_id, api_token)
+def cached_models(provider: str) -> list[str]:
+    if provider == "gemini":
+        return gemini_client.list_text_models(GEMINI_API_KEY)
+    return cloudflare_client.list_text_models(ACCOUNT_ID, API_TOKEN)
 
 
 # ---------------------------------------------------------------------------
@@ -60,10 +72,10 @@ if AUTH_USER and AUTH_PASSWORD and not ss.get("authenticated"):
                     st.error("ユーザー名またはパスワードが違います。")
     st.stop()
 
-if not (ACCOUNT_ID and API_TOKEN):
+if not PROVIDERS:
     st.error(
-        "Cloudflare の認証情報が見つかりません。.env に CLOUDFLARE_ACCOUNT_ID と "
-        "CLOUDFLARE_API_TOKEN を設定して、アプリを再起動してください。"
+        "AI の認証情報が見つかりません。.env に GEMINI_API_KEY、または "
+        "CLOUDFLARE_ACCOUNT_ID と CLOUDFLARE_API_TOKEN を設定して、アプリを再起動してください。"
     )
     st.stop()
 
@@ -84,9 +96,13 @@ with st.sidebar:
     st.divider()
     st.subheader("⚙️ 設定")
 
-    models = cached_models(ACCOUNT_ID, API_TOKEN)
+    provider = st.radio(
+        "AI サービス", list(PROVIDERS), format_func=PROVIDERS.get, horizontal=True,
+    )
+    models = cached_models(provider)
     model = st.selectbox(
         "モデル", models, index=0,
+        key=f"model_{provider}",
         format_func=lambda m: m.split("/")[-1],
         help="上にあるものほど日本語の文章作成におすすめです。無料プランでは使えないモデルもあります。",
     )
@@ -136,10 +152,13 @@ def run_generation(tool: Tool, conv: list[dict]) -> None:
     """会話の最後のユーザーメッセージに対する応答をストリーミング生成する。"""
     with st.chat_message("assistant", avatar="✨"):
         try:
-            text = st.write_stream(
-                stream_generate(ACCOUNT_ID, API_TOKEN, model, conv, tool.system,
-                                temperature, max_tokens)
-            )
+            if provider == "gemini":
+                stream = gemini_client.stream_generate(
+                    GEMINI_API_KEY, model, conv, tool.system, temperature, max_tokens)
+            else:
+                stream = cloudflare_client.stream_generate(
+                    ACCOUNT_ID, API_TOKEN, model, conv, tool.system, temperature, max_tokens)
+            text = st.write_stream(stream)
         except Exception as e:  # noqa: BLE001
             conv.pop()  # 失敗したリクエストは取り消す
             st.error(f"生成に失敗しました: {e}")
