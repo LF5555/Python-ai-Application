@@ -1,6 +1,7 @@
 # ✍️ AI ライティングツール
 
-Python + Streamlit + Cloudflare Workers AI で作った、個人用の AI ライティングツールです。
+Python + Streamlit で作った、個人用の AI ライティングツールです。
+AI は **Google Gemini** と **Cloudflare Workers AI** を、サイドバーで切り替えて使えます。
 
 ## 機能
 
@@ -22,7 +23,8 @@ Python + Streamlit + Cloudflare Workers AI で作った、個人用の AI ライ
 - 生成後に「もっと短く」などの **修正指示をチャットで追加** できます
 - Markdown ファイルとして保存 / コピー用テキスト / 文字数表示
 - 生成履歴（セッション中のみ保持）
-- モデル選択（Workers AI のモデル一覧を自動取得、日本語向けのおすすめ順）
+- AI サービスの切り替え（Google Gemini / Cloudflare Workers AI。`.env` にキーがあるものだけ表示）
+- モデル選択（選んだサービスのモデル一覧を自動取得、日本語向けのおすすめ順）
 - 創造性（temperature）・最大出力トークン数の調整
 - 簡易ログイン（`.env` に `APP_AUTH_USER` / `APP_AUTH_PASSWORD` を設定した場合）
 
@@ -34,16 +36,20 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-`.env.example` を `.env` にコピーして、Cloudflare の認証情報を設定します。
+`.env.example` を `.env` にコピーして、使いたい AI サービスの認証情報を設定します。
+Gemini と Cloudflare は、どちらか片方だけでも動きます。
 
 ```
+GEMINI_API_KEY=Gemini の API キー
 CLOUDFLARE_ACCOUNT_ID=アカウント ID
 CLOUDFLARE_API_TOKEN=API トークン（Workers AI の権限付き）
 APP_AUTH_USER=ログイン用ユーザー名
 APP_AUTH_PASSWORD=ログイン用パスワード
 ```
 
-アカウント ID と API トークンは、Cloudflare ダッシュボードの「AI > Workers AI > REST API を使用」から取得できます。
+Gemini の API キーは、Google AI Studio（https://aistudio.google.com/apikey）で取得できます。
+
+Cloudflare のアカウント ID と API トークンは、Cloudflare ダッシュボードの「AI > Workers AI > REST API を使用」から取得できます。
 ※ 無料プランでは使えないモデル（Kimi、DeepSeek v4、GLM-5.x など）があります。選ぶとエラーメッセージが表示されます。
 
 ## 起動
