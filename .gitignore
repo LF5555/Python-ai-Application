@@ -4,3 +4,6 @@ __pycache__/
 
 # セキュリティレポート（弱点の場所が書いてあるため git に入れない）
 security-report-*.md
+
+# Streamlit の秘密情報ファイル（今は使っていないが、使い始めたときの漏えい防止）
+.streamlit/secrets.toml
