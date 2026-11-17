@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import os
+import re
 import time
 from datetime import datetime
 
@@ -154,6 +155,20 @@ def render_field(tool: Tool, f: Field):
                          placeholder=f.placeholder, help=f.help)
 
 
+# Markdown の画像（![説明](URL) と ![説明][参照名]）
+_MD_IMAGE = re.compile(r"!\[([^\]]*)\](\([^)]*\)|\[[^\]]*\])")
+
+
+def safe_markdown(text: str) -> str:
+    """AI の出力を画面に表示する前に、画像を文字に置き換える。
+
+    画像を表示するとブラウザが URL に自動で接続する。貼り付けた文章に悪意ある指示が
+    仕込まれていると、入力内容を含む画像 URL を AI に書かせて、内容を外に送らせる手口があるため。
+    （保存用・コピー用のテキストは元のまま）
+    """
+    return _MD_IMAGE.sub(lambda m: f"［画像は表示しません: {m.group(1) or '説明なし'}］", text)
+
+
 def run_generation(tool: Tool, conv: list[dict]) -> None:
     """会話の最後のユーザーメッセージに対する応答をストリーミング生成する。"""
     with st.chat_message("assistant", avatar="✨"):
@@ -164,13 +179,16 @@ def run_generation(tool: Tool, conv: list[dict]) -> None:
             else:
                 stream = cloudflare_client.stream_generate(
                     ACCOUNT_ID, API_TOKEN, model, conv, tool.system, temperature, max_tokens)
-            text = st.write_stream(stream)
+            # 届いた文章を積み上げ、画像を取り除いてから表示し直す
+            box = st.empty()
+            text = ""
+            for chunk in stream:
+                text += chunk
+                box.markdown(safe_markdown(text))
         except Exception as e:  # noqa: BLE001
             conv.pop()  # 失敗したリクエストは取り消す
             st.error(f"生成に失敗しました: {e}")
             return
-    if not isinstance(text, str):
-        text = "".join(map(str, text))
     conv.append({"role": "model", "text": text})
     ss.history.insert(0, {
         "time": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -210,7 +228,7 @@ if page == HISTORY_PAGE:
         for i, h in enumerate(ss.history):
             t = TOOLS_BY_ID[h["tool"]]
             with st.expander(f"{h['time']}　{t.icon} {t.name}　—　{h['output'][:40]}…"):
-                st.markdown(h["output"])
+                st.markdown(safe_markdown(h["output"]))
                 output_actions(h["output"], t, 10_000 + i)
     st.stop()
 
@@ -264,7 +282,7 @@ if conv:
                     st.markdown(msg["text"])
             continue
         with st.chat_message("assistant", avatar="✨"):
-            st.markdown(msg["text"])
+            st.markdown(safe_markdown(msg["text"]))
             if i == len(conv) - 1:
                 output_actions(msg["text"], tool, i)
 
