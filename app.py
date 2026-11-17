@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import os
+import time
 from datetime import datetime
 
 import streamlit as st
@@ -53,6 +54,9 @@ def cached_models(provider: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # ログイン（.env に APP_AUTH_USER / APP_AUTH_PASSWORD がある場合のみ）
 # ---------------------------------------------------------------------------
+LOGIN_FAIL_WAIT = 3  # ログイン失敗時に待たせる秒数（パスワードの総当たりを遅くするため）
+
+
 def _match(a: str, b: str) -> bool:
     return hmac.compare_digest(a.encode(), b.encode())
 
@@ -69,6 +73,8 @@ if AUTH_USER and AUTH_PASSWORD and not ss.get("authenticated"):
                     ss.authenticated = True
                     st.rerun()
                 else:
+                    with st.spinner("確認しています…"):
+                        time.sleep(LOGIN_FAIL_WAIT)
                     st.error("ユーザー名またはパスワードが違います。")
     st.stop()
 
